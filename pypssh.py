@@ -1,5 +1,6 @@
 #!/bin/env python
 import configparser, re, pprint
+from pathlib import Path
 import yaml
 import logging
 from pssh.clients import ParallelSSHClient
@@ -23,7 +24,6 @@ def conversion_config(config,group='all'):
     # 合并所有主机到 all group
     for i in host_groups.values():
         host_groups['all'].update(i)
-
     # 注入 all 变量
     for group in host_groups:
         for host in host_groups[group]:
@@ -38,6 +38,8 @@ def conversion_config(config,group='all'):
 @click.option('-i','--inventory',default='/etc/pypssh/inventory.conf',type=str,required=False)
 @click.option('-d','--debug',default=False,type=bool,required=False)
 def cli(inventory,debug):
+    if not Path(inventory).is_file():
+        logger.error("%s 不是有效的配置文件" % inventory)
     config.read(inventory)
     if debug:
         logger.setLevel(logging.DEBUG)
