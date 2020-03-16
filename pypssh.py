@@ -4,8 +4,9 @@ from pathlib import Path
 import yaml
 import logging
 from pssh.clients import ParallelSSHClient
-from gevent import joinall
+# from scp import SCPClient
 # from pssh.clients.native import ParallelSSHClient
+from gevent import joinall
 import click
 
 logging.basicConfig(level = logging.ERROR,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
@@ -70,22 +71,34 @@ def exec(group,hosts,command,show,pty):
 
 @cli.command()
 @click.option('-g','--group',default='all')
+@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.argument('local_file', type=click.types.Path(exists=True))
 @click.argument('remote_file', type=click.types.Path())
-def put(group,local_file,remote_file):
+def put(group,hosts,local_file,remote_file):
     host_grouops = conversion_config(config)
-    client = ParallelSSHClient(list(host_grouops.get(group).keys()),host_config=host_grouops.get(group))
-    greenlets = client.copy_file(local_file,remote_file,recurse=True)
+    if hosts:
+        hosts_config = {host:host_grouops.get('all',{}).get(host,{}) for host in hosts}
+        client = ParallelSSHClient(list(hosts_config.keys()),host_config=hosts_config)
+    else:
+        client = ParallelSSHClient(list(host_grouops.get(group).keys()),host_config=host_grouops.get(group))
+    # greenlets = client.copy_file(local_file,remote_file,recurse=True)
+    greenlets = client.scp_send(local_file,remote_file,recurse=True)
     joinall(greenlets, raise_error=False)
 
 @cli.command()
 @click.option('-g','--group',default='all')
+@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.argument('remote_file', type=click.types.Path())
 @click.argument('local_file', type=click.types.Path())
-def pull(group,remote_file,local_file):
+def pull(group,hosts,remote_file,local_file):
     host_grouops = conversion_config(config)
-    client = ParallelSSHClient(list(host_grouops.get(group).keys()),host_config=host_grouops.get(group))
-    greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
+    if hosts:
+        hosts_config = {host:host_grouops.get('all',{}).get(host,{}) for host in hosts}
+        client = ParallelSSHClient(list(hosts_config.keys()),host_config=hosts_config)
+    else:
+        client = ParallelSSHClient(list(host_grouops.get(group).keys()),host_config=host_grouops.get(group))
+    # greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
+    greenlets = client.scp_recv(remote_file,local_file,recurse=True)
     joinall(greenlets, raise_error=False)
 
 if __name__ == '__main__':
