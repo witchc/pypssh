@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 import logging
 from pssh.clients import ParallelSSHClient
+from typing import Union
 # from scp import SCPClient
 # from pssh.clients.native import ParallelSSHClient
 from gevent import joinall
@@ -27,43 +28,53 @@ def conversion_config(config:dict, group:str = 'all') -> dict:
     host_groups = {key:dict(value) for key,value in config._sections.items() if key!='vars' and not re.match(IS_VARS,key) and key != 'DEFAULT'}
     vars_groups = {key:dict(value) for key,value in config._sections.items() if key=='vars' or re.match(IS_VARS,key) and key != 'DEFAULT'}
     host_groups.setdefault('all',[])
-    # 合并所有主机到 all group
-    for i in host_groups.values():
-        host_groups['all'].update(i)
-    # 注入 all 变量
+
+    # 处理其他组
     for item_group in host_groups:
         for host in host_groups[item_group]:
-            host_groups[item_group][host] = vars_groups.get('vars',{})
+            # 将组变量合并到组主机
+            host_groups[item_group][host] = {}
+            host_groups[item_group][host].update(vars_groups.get('vars',{}))
             host_groups[item_group][host].update(vars_groups.get(item_group + ':vars',{}))
+        host_groups['all'].update(host_groups[item_group])
+
     logger.debug('变量信息:\n' + pprint.pformat(vars_groups)) 
     logger.debug('最终主机组:\n' + pprint.pformat(host_groups))
-    return host_groups.get(group)
+    if group:
+        return host_groups.get(group,{})
+    else:
+        return host_groups
+
+def get_operate_target(config:dict, target:Union[list,str]) -> dict:
+    group_target = conversion_config(config,None)
+    host_target = { key:{key:dict(value)} for key,value in conversion_config(config, 'all').items() }
+    return { **host_target, **group_target }.get(target,{})
 
 @click.group()
 @click.option('-i','--inventory',default='/etc/pypssh/inventory.conf',type=str,required=False)
-@click.option('-g','--group',default='all',type=str)
 @click.option('-d','--debug',flag_value=True,type=bool,required=False)
-def cli(inventory, group, debug):
+@click.argument('target', type = str, nargs = 1, required = True)
+def cli(inventory, target, debug):
     if not Path(inventory).is_file():
         logger.error("%s 不是有效的配置文件" % inventory)
     config.read(inventory)
     global host_selected
-    host_selected = conversion_config(config,group)
+    host_selected = get_operate_target(config,target)
     logger.debug("Host Selected is %s" % repr(host_selected))
     if debug:
         logger.setLevel(logging.DEBUG)
 
+
 @cli.command()
-@click.option('-h','--hosts',type=str,multiple=True,required=False)
+def prints():
+    print(host_selected)
+
+@cli.command()
 @click.option('-c','--command',default='echo hello world',type=str)
 @click.option('--show/--no-show',default=True,type=bool)
 @click.option('--pty',default=True,type=bool,required=False)
-def execute(hosts, command, show, pty):
-    if hosts:
-        hosts_config = {host:host_selected.get(host,{}) for host in hosts}
-        client = ParallelSSHClient(list(hosts_config.keys()),host_config=hosts_config)
-    else:
-        client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
+def execute(command, show, pty):
+    client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     output = client.run_command(command,use_pty=pty)
     client.join(output)
     logger.debug(output.items())
@@ -76,39 +87,28 @@ def execute(hosts, command, show, pty):
                 click.echo("%s" % (line))
 
 @cli.command()
-@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.argument('local_file', type=click.types.Path(exists=True))
 @click.argument('remote_file', type=click.types.Path())
-def put(hosts, local_file, remote_file):
-    if hosts:
-        hosts_config = {host:host_selected.get(host,{}) for host in hosts}
-        client = ParallelSSHClient(list(hosts_config.keys()),host_config=hosts_config)
-    else:
-        client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
+def put(local_file, remote_file):
+    client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     # greenlets = client.copy_file(local_file,remote_file,recurse=True)
     greenlets = client.scp_send(local_file,remote_file,recurse=True)
     joinall(greenlets, raise_error=False)
 
 @cli.command()
-@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.argument('remote_file', type=click.types.Path())
 @click.argument('local_file', type=click.types.Path())
 def pull(hosts, remote_file, local_file):
-    if hosts:
-        hosts_config = {host:host_selected.get('all',{}).get(host,{}) for host in hosts}
-        client = ParallelSSHClient(list(hosts_config.keys()),host_config=hosts_config)
-    else:
-        client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
+    client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     # greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
     greenlets = client.scp_recv(remote_file,local_file,recurse=True)
     joinall(greenlets, raise_error=False)
 
 @cli.command()
-@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.option('-t','--timeout',default=1.0,type=float)
 @click.option('-p','--port',default=22,type=int)
 @click.option('--ssh-test/--no-ssh-test',default=True,type=bool)
-def test(hosts, timeout, port, ssh_test):
+def test(timeout, port, ssh_test):
 
     def _connect_test(host):
         s = gevent.socket.socket(gevent.socket.AF_INET, gevent.socket.SOCK_STREAM)
@@ -141,13 +141,8 @@ def test(hosts, timeout, port, ssh_test):
         return host
 
     all_hosts=[]
-    if hosts:
-        host_selected.items()
-        all_hosts = [tuple_host for tuple_host in host_selected.items() if tuple_host[0] in hosts]
-        conns = [gevent.spawn(_ssh_test if ssh_test else _connect_test, host) for host in all_hosts]
-    else:
-        all_hosts = list(host_selected.items())
-        conns = [gevent.spawn(_ssh_test if ssh_test else _connect_test, host) for host in all_hosts]
+    all_hosts = list(host_selected.items())
+    conns = [gevent.spawn(_ssh_test if ssh_test else _connect_test, host) for host in all_hosts]
 
     working_hosts = [s.get()[0] for s in gevent.joinall(conns) if s.get() is not None]
     all_hosts = [item[0] for item in all_hosts]
@@ -159,15 +154,14 @@ def test(hosts, timeout, port, ssh_test):
 # 远程执行脚本文件，可以从配置文件加载变量，可以读参数变量
 @cli.command()
 @click.argument('script_file', type=click.types.Path())
-@click.option('-h','--hosts',type=str,multiple=True,required=False)
 @click.option('-a','--arg',type=str,multiple=True,required=False)
 @click.option('--show/--no-show',default=True,type=bool)
 @click.option('--pty',default=True,type=bool,required=False)
 @click.pass_context
-def execfile(ctx, script_file, hosts, arg, show, pty):
-    ctx.invoke(put, hosts=hosts, local_file=script_file, remote_file="/tmp/.pypssh/tmp")
+def execfile(ctx, script_file, arg, show, pty):
+    ctx.invoke(put, local_file=script_file, remote_file="/tmp/.pypssh/tmp")
     command = ''.join(["export %s && "%item for item in arg]) + "chmod +x /tmp/.pypssh/tmp && /tmp/.pypssh/tmp" 
-    ctx.invoke(execute, hosts=hosts, command=command, show=show, pty=pty)
+    ctx.invoke(execute, command=command, show=show, pty=pty)
 
 
 if __name__ == '__main__':
