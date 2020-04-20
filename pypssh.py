@@ -98,7 +98,7 @@ def put(local_file, remote_file):
 @cli.command()
 @click.argument('remote_file', type=click.types.Path())
 @click.argument('local_file', type=click.types.Path())
-def pull(hosts, remote_file, local_file):
+def pull(remote_file, local_file):
     client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     # greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
     greenlets = client.scp_recv(remote_file,local_file,recurse=True)
