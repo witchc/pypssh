@@ -1,0 +1,31 @@
+# This workflows will upload a Python Package using Twine when a release is created
+# For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
+
+name: Upload Python Package
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  deploy:
+
+    runs-on: centos7
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.7'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine
+        pip install -r requirement.txt
+    - name: Build and publish
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        pyinstaller pypssh.py -F --hidden-import=ssh2.agent --hidden-import=ssh2.pkey --hidden-import=ssh2.utils --hidden-import=ssh2.channel --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.listener --hidden-import=ssh2.statinfo --hidden-import=ssh2.knownhost --hidden-import=ssh2.sftp --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.session --hidden-import=ssh2.publickey --hidden-import=ssh2.fileinfo --hidden-import=ssh2.exceptions --hidden-import=ssh2.error_codes --hidden-import=ssh2.c_stat --hidden-import=ssh2.ssh2 --hidden-import=ssh2.c_sftp --hidden-import=ssh2.c_pkey --hidden-import=ssh2.agent
