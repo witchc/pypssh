@@ -10,6 +10,7 @@
 ### In Progress
 
 
-### Done âœ“
+### Done
+- [易用性需求:2020年4月26日] execfile 指令支持携带脚本参数。
 
 

@@ -154,13 +154,17 @@ def test(timeout, port, ssh_test):
 # 远程执行脚本文件，可以从配置文件加载变量，可以读参数变量
 @cli.command()
 @click.argument('script_file', type=click.types.Path())
+@click.argument('script_arg', type = str, nargs = -1, required = False)
 @click.option('-a','--arg',type=str,multiple=True,required=False)
 @click.option('--show/--no-show',default=True,type=bool)
 @click.option('--pty',default=True,type=bool,required=False)
 @click.pass_context
-def execfile(ctx, script_file, arg, show, pty):
+def execfile(ctx, script_file, script_arg, arg, show, pty):
     ctx.invoke(put, local_file=script_file, remote_file="/tmp/.pypssh/tmp")
-    command = ''.join(["export %s && "%item for item in arg]) + "chmod +x /tmp/.pypssh/tmp && /tmp/.pypssh/tmp" 
+    script_env = ''.join(["export %s && "%item for item in arg])
+    script_arg_str = ' '.join(script_arg)
+    command = f"{script_env} chmod +x /tmp/.pypssh/tmp && /tmp/.pypssh/tmp {script_arg_str}"
+    logger.debug(command)
     ctx.invoke(execute, command=command, show=show, pty=pty)
 
 
