@@ -6,11 +6,13 @@ name: Upload Python Package
 on:
   release:
     types: [created]
+  push:
+  
 
 jobs:
   deploy:
 
-    runs-on: centos7
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
