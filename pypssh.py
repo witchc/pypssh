@@ -55,6 +55,13 @@ def get_operate_target(config:dict, target:Union[list,str]) -> dict:
 @click.option('-d','--debug',flag_value=True,type=bool,required=False)
 @click.argument('target', type = str, nargs = 1, required = True)
 def cli(inventory, target, debug):
+    """
+    该脚本用于批量执行命令/脚本以及批量上传下载文件, 需要注意的是:
+    \n
+      - 上传下载文件不支持通配符，需要明确指定文件/目录
+    \n
+      - 使用 test / prints 可以测试端口/ssh连通性和目标选取到的数据
+    """
     if not Path(inventory).is_file():
         logger.error("%s 不是有效的配置文件" % inventory)
     config.read(inventory)
@@ -67,6 +74,9 @@ def cli(inventory, target, debug):
 
 @cli.command()
 def prints():
+    """
+    打印选择到的主机信息
+    """
     print(host_selected)
 
 @cli.command()
@@ -74,6 +84,9 @@ def prints():
 @click.option('--show/--no-show',default=True,type=bool)
 @click.option('--pty',default=True,type=bool,required=False)
 def execute(command, show, pty):
+    """
+    为目标批量执行命令
+    """
     client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     output = client.run_command(command,use_pty=pty)
     client.join(output)
@@ -90,6 +103,9 @@ def execute(command, show, pty):
 @click.argument('local_file', type=click.types.Path(exists=True))
 @click.argument('remote_file', type=click.types.Path())
 def put(local_file, remote_file):
+    """
+    为目标批量上传文件
+    """
     client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     # greenlets = client.copy_file(local_file,remote_file,recurse=True)
     greenlets = client.scp_send(local_file,remote_file,recurse=True)
@@ -99,6 +115,9 @@ def put(local_file, remote_file):
 @click.argument('remote_file', type=click.types.Path())
 @click.argument('local_file', type=click.types.Path())
 def pull(remote_file, local_file):
+    """
+    为目标批量下载文件
+    """
     client = ParallelSSHClient(list(host_selected.keys()),host_config=host_selected)
     # greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
     greenlets = client.scp_recv(remote_file,local_file,recurse=True)
@@ -109,7 +128,9 @@ def pull(remote_file, local_file):
 @click.option('-p','--port',default=22,type=int)
 @click.option('--ssh-test/--no-ssh-test',default=True,type=bool)
 def test(timeout, port, ssh_test):
-
+    """
+    测试端口/ssh的连通性
+    """
     def _connect_test(host):
         s = gevent.socket.socket(gevent.socket.AF_INET, gevent.socket.SOCK_STREAM)
         s.timeout = timeout
@@ -160,6 +181,9 @@ def test(timeout, port, ssh_test):
 @click.option('--pty',default=True,type=bool,required=False)
 @click.pass_context
 def execfile(ctx, script_file, script_arg, arg, show, pty):
+    """
+    使本地脚本文件批量下发到远程执行
+    """
     ctx.invoke(put, local_file=script_file, remote_file="/tmp/.pypssh/tmp")
     script_env = ''.join(["export %s && "%item for item in arg])
     script_arg_str = ' '.join(script_arg)
