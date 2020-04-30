@@ -99,14 +99,13 @@ def prints():
               default="- Host: \n${host}\n- Command: \n${command}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n", 
               type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
             )
-@click.option('--pty', default=True, type=bool, required=False)
-def execute(command, template, pty):
+def execute(command, template):
     """
     为目标批量执行命令
     """
     client = ParallelSSHClient(
         list(host_selected.keys()), host_config=host_selected, num_retries=1, retry_delay=2)
-    output = client.run_command(command, use_pty=pty, stop_on_errors = False)
+    output = client.run_command(command, stop_on_errors = False)
     client.join(output)
     logger.debug(output.items())
     for host, host_output in output.items():
@@ -211,10 +210,9 @@ def test(timeout, port, ssh_test):
             )
 @click.option('-e','--env', type=str, multiple=True, required=False, help='脚本执行需要的环境变量')
 @click.option('-a', '--attachment', type=str, multiple=True, required=False, help='执行脚本所需要的附属文件')
-@click.option('--pty', default=True, type=bool, required=False)
 @click.option('-w','--workdir',default='/tmp/.pypssh/',type=str, help='工作区')
 @click.pass_context
-def execfile(ctx, script_file, template, script_arg, env, attachment, pty, workdir):
+def execfile(ctx, script_file, template, script_arg, env, attachment, workdir):
     """
     使本地脚本文件批量下发到远程执行
     """
@@ -229,7 +227,7 @@ def execfile(ctx, script_file, template, script_arg, env, attachment, pty, workd
     script_env_str = ' '.join(script_env)
     command = f"{script_env} cd {workdir} && chmod +x {remote_file} && {remote_file} {script_env_str}"
     logger.debug(command)
-    ctx.invoke(execute, command=command, template=template, pty=pty)
+    ctx.invoke(execute, command=command, template=template)
 
 
 if __name__ == '__main__':
