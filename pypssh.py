@@ -15,9 +15,9 @@ from gevent import joinall
 import click
 import gevent
 
-# logging.basicConfig(level=logging.ERROR,
-                    # format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
-logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+logging.basicConfig(level=logging.ERROR,
+                    format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+# logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 config = configparser.ConfigParser(allow_no_value=True)
 # 大小写不明感
@@ -27,6 +27,8 @@ IS_VARS = re.compile("(\w+):vars", re.I)
 # stdin_text.readable()
 
 host_selected = {}
+num_retries=1
+retry_delay=2
 
 # 返回为某个组的主机列表和主机配置
 
@@ -62,6 +64,13 @@ def get_operate_target(config: dict, target: Union[list, str]) -> dict:
         config, 'all').items()}
     return {**host_target, **group_target}.get(target, {})
 
+def get_client():
+    return ParallelSSHClient(
+                            list(host_selected.keys()), 
+                            host_config=host_selected, 
+                            num_retries=num_retries, 
+                            retry_delay=retry_delay
+                            )
 
 @click.group()
 @click.option('-i', '--inventory', default='/etc/pypssh/inventory.conf', type=str, required=False)
@@ -103,8 +112,7 @@ def execute(command, template):
     """
     为目标批量执行命令
     """
-    client = ParallelSSHClient(
-        list(host_selected.keys()), host_config=host_selected, num_retries=1, retry_delay=2)
+    client = get_client()
     output = client.run_command(command, stop_on_errors = False)
     client.join(output)
     logger.debug(output.items())
@@ -127,8 +135,7 @@ def put(local_file, remote_file):
     """
     为目标批量上传文件
     """
-    client = ParallelSSHClient(
-        list(host_selected.keys()), host_config=host_selected)
+    client = get_client()
     # greenlets = client.copy_file(local_file,remote_file,recurse=True)
     greenlets = client.scp_send(local_file, remote_file, recurse=True)
     joinall(greenlets, raise_error=False)
@@ -141,8 +148,7 @@ def pull(remote_file, local_file):
     """
     为目标批量下载文件
     """
-    client = ParallelSSHClient(
-        list(host_selected.keys()), host_config=host_selected)
+    client = get_client()
     # greenlets = client.copy_remote_file(remote_file,local_file,recurse=True)
     greenlets = client.scp_recv(remote_file, local_file, recurse=True)
     joinall(greenlets, raise_error=False)
