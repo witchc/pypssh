@@ -2,6 +2,7 @@
 import configparser
 import re
 import pprint
+from string import Template
 import paramiko
 from pathlib import Path
 import yaml
@@ -14,9 +15,9 @@ from gevent import joinall
 import click
 import gevent
 
-logging.basicConfig(level=logging.ERROR,
-                    format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
-# logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+# logging.basicConfig(level=logging.ERROR,
+                    # format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 config = configparser.ConfigParser(allow_no_value=True)
 # 大小写不明感
@@ -93,26 +94,31 @@ def prints():
 
 
 @cli.command()
-@click.option('-c', '--command', default='echo hello world', type=str)
-@click.option('--show/--no-show', default=True, type=bool)
+@click.option('-c', '--command', prompt='command', type=str, help="需要批量执行的命令")
+@click.option('-t', '--template', 
+              default="- Host: \n${host}\n- Command: \n${command}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n", 
+              type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
+            )
 @click.option('--pty', default=True, type=bool, required=False)
-def execute(command, show, pty):
+def execute(command, template, pty):
     """
     为目标批量执行命令
     """
     client = ParallelSSHClient(
-        list(host_selected.keys()), host_config=host_selected)
-    output = client.run_command(command, use_pty=pty)
+        list(host_selected.keys()), host_config=host_selected, num_retries=1, retry_delay=2)
+    output = client.run_command(command, use_pty=pty, stop_on_errors = False)
     client.join(output)
     logger.debug(output.items())
     for host, host_output in output.items():
-        click.echo(click.style("- Host [%s]\n- Command [%s]" % (
-            host, command), fg="green" if host_output.exit_code == 0 else "red"))
-        if show:
-            for line in host_output.stdout:
-                click.echo("%s" % (line))
-            for line in host_output.stderr:
-                click.echo("%s" % (line))
+        exstr = repr(host_output.exception)
+        stdout = '\n'.join([line for line in host_output.stdout]) if host_output.stdout else "None"
+        stderr = '\n'.join([line for line in host_output.stderr]) if host_output.stderr else "None"
+        result_template = Template(template)
+        click.echo(click.style(
+                   result_template.substitute(locals()),
+                   fg="green" if host_output.exit_code == 0 else "red"
+                   )
+                  )
 
 
 @cli.command()
@@ -199,11 +205,11 @@ def test(timeout, port, ssh_test):
 @cli.command()
 @click.argument('script_file', type=click.types.Path())
 @click.argument('script_arg', type=str, nargs=-1, required=False)
+@click.option('-t', '--template', default=None, type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr")
 @click.option('-a', '--arg', type=str, multiple=True, required=False)
-@click.option('--show/--no-show', default=True, type=bool)
 @click.option('--pty', default=True, type=bool, required=False)
 @click.pass_context
-def execfile(ctx, script_file, script_arg, arg, show, pty):
+def execfile(ctx, script_file, template, script_arg, arg, show, pty):
     """
     使本地脚本文件批量下发到远程执行
     """
@@ -212,7 +218,7 @@ def execfile(ctx, script_file, script_arg, arg, show, pty):
     script_arg_str = ' '.join(script_arg)
     command = f"{script_env} chmod +x /tmp/.pypssh/tmp && /tmp/.pypssh/tmp {script_arg_str}"
     logger.debug(command)
-    ctx.invoke(execute, command=command, show=show, pty=pty)
+    ctx.invoke(execute, command=command, template=template, pty=pty)
 
 
 if __name__ == '__main__':
