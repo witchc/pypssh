@@ -216,16 +216,20 @@ def execfile(ctx, script_file, template, script_arg, env, attachment, workdir):
     """
     使本地脚本文件批量下发到远程执行
     """
+    put_files = []
     if not Path(script_file).is_file():
         raise AssertionError("script_file must is file!")
     remote_file = str(Path(workdir).joinpath(Path(script_file).name))
+    put_files.append(remote_file)
     ctx.invoke(put, local_file=script_file, remote_file=remote_file)
     for att_item in attachment:
         remote_att_file = str(Path(workdir).joinpath(Path(att_item).name))
         ctx.invoke(put, local_file=att_item, remote_file=remote_att_file)
+        put_files.append(remote_att_file)
+    logger.debug(f'put files is: {put_files}')
     script_env = ''.join(["export %s && " % item for item in env])
-    script_env_str = ' '.join(script_env)
-    command = f"{script_env} cd {workdir} && chmod +x {remote_file} && {remote_file} {script_env_str}"
+    script_arg_str = ' '.join(script_arg)
+    command = f"{script_env} cd {workdir} && chmod +x {remote_file} && {remote_file} {script_arg_str} && rm -rf {' '.join(put_files)}"
     logger.debug(command)
     ctx.invoke(execute, command=command, template=template)
 
