@@ -205,18 +205,29 @@ def test(timeout, port, ssh_test):
 @cli.command()
 @click.argument('script_file', type=click.types.Path())
 @click.argument('script_arg', type=str, nargs=-1, required=False)
-@click.option('-t', '--template', default=None, type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr")
-@click.option('-a', '--arg', type=str, multiple=True, required=False)
+@click.option('-t', '--template', 
+              default="- Host: \n${host}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n", 
+              type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
+            )
+@click.option('-e','--env', type=str, multiple=True, required=False, help='脚本执行需要的环境变量')
+@click.option('-a', '--attachment', type=str, multiple=True, required=False, help='执行脚本所需要的附属文件')
 @click.option('--pty', default=True, type=bool, required=False)
+@click.option('-w','--workdir',default='/tmp/.pypssh/',type=str, help='工作区')
 @click.pass_context
-def execfile(ctx, script_file, template, script_arg, arg, show, pty):
+def execfile(ctx, script_file, template, script_arg, env, attachment, pty, workdir):
     """
     使本地脚本文件批量下发到远程执行
     """
-    ctx.invoke(put, local_file=script_file, remote_file="/tmp/.pypssh/tmp")
-    script_env = ''.join(["export %s && " % item for item in arg])
-    script_arg_str = ' '.join(script_arg)
-    command = f"{script_env} chmod +x /tmp/.pypssh/tmp && /tmp/.pypssh/tmp {script_arg_str}"
+    if not Path(script_file).is_file():
+        raise AssertionError("script_file must is file!")
+    remote_file = str(Path(workdir).joinpath(Path(script_file).name))
+    ctx.invoke(put, local_file=script_file, remote_file=remote_file)
+    for att_item in attachment:
+        remote_att_file = str(Path(workdir).joinpath(Path(att_item).name))
+        ctx.invoke(put, local_file=att_item, remote_file=remote_att_file)
+    script_env = ''.join(["export %s && " % item for item in env])
+    script_env_str = ' '.join(script_env)
+    command = f"{script_env} cd {workdir} && chmod +x {remote_file} && {remote_file} {script_env_str}"
     logger.debug(command)
     ctx.invoke(execute, command=command, template=template, pty=pty)
 
