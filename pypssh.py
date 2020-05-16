@@ -14,6 +14,7 @@ from typing import Union
 from gevent import joinall
 import click
 import gevent
+import json as jso
 
 logging.basicConfig(level=logging.ERROR,
                     format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
@@ -116,11 +117,12 @@ def prints():
 
 @cli.command()
 @click.option('-c', '--command', prompt='command', type=str, help="需要批量执行的命令")
+@click.option('--json', flag_value=True, type=bool, required=False)
 @click.option('-t', '--template', 
-              default="- Host: \n${host}\n- Command: \n${command}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n", 
+              default="- Host: \n${host}\n- Command: \n${command}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n- EXIT_CODE: \n${exit_code}\n", 
               type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
             )
-def execute(command, template):
+def execute(command, json, template):
     """
     为目标批量执行命令
     """
@@ -128,16 +130,29 @@ def execute(command, template):
     output = client.run_command(command, stop_on_errors = False)
     client.join(output)
     logger.debug(output.items())
+    results = []
     for host, host_output in output.items():
         exstr = repr(host_output.exception)
-        stdout = '\n'.join([line for line in host_output.stdout]) if host_output.stdout else "None"
-        stderr = '\n'.join([line for line in host_output.stderr]) if host_output.stderr else "None"
+        stdout = '\n'.join([line for line in host_output.stdout])
+        stderr = '\n'.join([line for line in host_output.stderr])
+        exit_code = host_output.exit_code
         result_template = Template(template)
-        click.echo(click.style(
-                   result_template.substitute(locals()),
-                   fg="green" if host_output.exit_code == 0 else "red"
-                   )
-                  )
+
+        result = {
+            'host':host,
+            'command':command,
+            'exstr':exstr,
+            'stdout':stdout,
+            'stderr':stderr,
+            'exit_code':exit_code
+        }
+
+        if json:
+            results.append(result)
+        else:
+            click.echo(result_template.substitute(result))
+    if json:
+        click.echo(jso.dumps(results))
 
 
 @cli.command()
@@ -168,9 +183,9 @@ def pull(remote_file, local_file):
 
 @cli.command()
 @click.option('-t', '--timeout', default=1.0, type=float)
-@click.option('-p', '--port', default=22, type=int)
+@click.option('--json', flag_value=True, type=bool, required=False)
 @click.option('--ssh-test/--no-ssh-test', default=True, type=bool)
-def test(timeout, port, ssh_test):
+def test(timeout, json, ssh_test):
     """
     测试端口/ssh的连通性
     """
@@ -179,9 +194,9 @@ def test(timeout, port, ssh_test):
             gevent.socket.AF_INET, gevent.socket.SOCK_STREAM)
         s.timeout = timeout
         try:
-            s.connect((host[0], port))
+            s.connect((host[0], host[1]['port']))
         except Exception as ex:
-            logger.error(host[0] + ' 出现异常:' + repr(ex))
+            logger.error(f"{host[0]}:{host[1]['port']} 出现异常:{repr(ex)}")
             return None
         s.close()
         return host
@@ -194,12 +209,13 @@ def test(timeout, port, ssh_test):
                 hostname=host[0],
                 password=host[1]['password'],
                 username=host[1]['username'],
+                port= host[1]['port'],
                 timeout=timeout,
                 look_for_keys=False,
-                allow_agent=False,
-                port=port)
+                allow_agent=False
+                )
         except Exception as ex:
-            logger.error(host[0] + ' 出现异常:' + repr(ex))
+            logger.error(f"{host[0]}:{host[1]['port']} 出现异常: {repr(ex)}")
             return None
         finally:
             client.close()
@@ -213,15 +229,18 @@ def test(timeout, port, ssh_test):
     working_hosts = [s.get()[0]
                      for s in gevent.joinall(conns) if s.get() is not None]
     all_hosts = [item[0] for item in all_hosts]
-
-    print('Working_host：\n' + repr(set(working_hosts)))
-    print('Non-Working_host：\n' + repr(set(all_hosts) - set(working_hosts)))
+    if json:
+        click.echo(jso.dumps({'working_host':list(set(working_hosts)),'non_working_host':list(set(all_hosts) - set(working_hosts))}))
+    else:
+        click.echo('Working_host：\n' + repr(list(set(working_hosts))))
+        click.echo('Non-Working_host：\n' + repr(list(set(all_hosts) - set(working_hosts))))
 
 
 # 远程执行脚本文件，可以从配置文件加载变量，可以读参数变量
 @cli.command()
 @click.argument('script_file', type=click.types.Path())
 @click.argument('script_arg', type=str, nargs=-1, required=False)
+@click.option('--json', flag_value=True, type=bool, required=False)
 @click.option('-t', '--template', 
               default="- Host: \n${host}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n", 
               type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
@@ -230,7 +249,7 @@ def test(timeout, port, ssh_test):
 @click.option('-a', '--attachment', type=str, multiple=True, required=False, help='执行脚本所需要的附属文件')
 @click.option('-w','--workdir',default='/tmp/.pypssh/',type=str, help='工作区')
 @click.pass_context
-def execfile(ctx, script_file, template, script_arg, env, attachment, workdir):
+def execfile(ctx, script_file, json, template, script_arg, env, attachment, workdir):
     """
     使本地脚本文件批量下发到远程执行
     """
@@ -249,7 +268,7 @@ def execfile(ctx, script_file, template, script_arg, env, attachment, workdir):
     script_arg_str = ' '.join(script_arg)
     command = f"{script_env} cd {workdir} && chmod +x {remote_file} && {remote_file} {script_arg_str} && rm -rf {' '.join(put_files)}"
     logger.debug(command)
-    ctx.invoke(execute, command=command, template=template)
+    ctx.invoke(execute, command=command, json=json, template=template)
 
 
 if __name__ == '__main__':
