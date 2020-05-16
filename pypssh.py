@@ -33,12 +33,18 @@ retry_delay=2
 # 返回为某个组的主机列表和主机配置
 
 
-def conversion_config(config: dict, group: str = 'all') -> dict:
+def conversion_config(config:dict, group:str = 'all', username:str = None, password:str = None, port:int = None) -> dict:
+    config.setdefault('vars',{})
+    if username:
+        config['vars']['username'] = username
+    if password:
+        config['vars']['password'] = password
+    if port:
+        config['vars']['port'] = str(port)
     host_groups = {key: dict(value) for key, value in config._sections.items(
     ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
     vars_groups = {key: dict(value) for key, value in config._sections.items(
     ) if key == 'vars' or re.match(IS_VARS, key) and key != 'DEFAULT'}
-    host_groups.setdefault('all', [])
 
     # 处理其他组
     for item_group in host_groups:
@@ -57,12 +63,12 @@ def conversion_config(config: dict, group: str = 'all') -> dict:
     else:
         return host_groups
 
-
-def get_operate_target(config: dict, target: Union[list, str]) -> dict:
-    group_target = conversion_config(config, None)
+def get_operate_target(config:dict, target:str, username:str, password:str, port:int) -> dict:
+    group_target = conversion_config(config, None, username, password, port)
     host_target = {key: {key: dict(value)} for key, value in conversion_config(
-        config, 'all').items()}
-    return {**host_target, **group_target}.get(target, {})
+        config, 'all', username, password, port).items()}
+    result = {**host_target, **group_target}.get(target, {})
+    return result if result else {target:{'username':username,'password':password,'port':port}}
 
 def get_client():
     return ParallelSSHClient(
@@ -75,8 +81,11 @@ def get_client():
 @click.group()
 @click.option('-i', '--inventory', default='/etc/pypssh/inventory.conf', type=str, required=False)
 @click.option('-d', '--debug', flag_value=True, type=bool, required=False)
+@click.option('-u', '--username', type=str, help="ssh帐号", required=False)
+@click.option('-p', '--password', type=str, help="ssh密码", required=False)
+@click.option('-P','--port',type=int,help='ssh端口',default=22,required=False)
 @click.argument('target', type=str, nargs=1, required=True)
-def cli(inventory, target, debug):
+def cli(inventory, debug, username, password, port, target):
     """
     该脚本用于批量执行命令/脚本以及批量上传下载文件, 需要注意的是:
     \n
@@ -85,10 +94,13 @@ def cli(inventory, target, debug):
       - 使用 test / prints 可以测试端口/ssh连通性和目标选取到的数据
     """
     if not Path(inventory).is_file():
-        logger.error("%s 不是有效的配置文件" % inventory)
-    config.read(inventory)
+        logger.warning("%s 不是有效的配置文件" % inventory)
+    try:
+        config.read(inventory)
+    except Exception as ex:
+        logger.warning(ex)
     global host_selected
-    host_selected = get_operate_target(config, target)
+    host_selected = get_operate_target(config, target, username, password, port)
     logger.debug("Host Selected is %s" % repr(host_selected))
     if debug:
         logger.setLevel(logging.DEBUG)
