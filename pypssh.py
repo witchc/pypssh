@@ -133,8 +133,8 @@ def execute(command, json, template):
     results = []
     for host, host_output in output.items():
         exstr = repr(host_output.exception)
-        stdout = '\n'.join([line for line in host_output.stdout])
-        stderr = '\n'.join([line for line in host_output.stderr])
+        stdout = '\n'.join([line for line in host_output.stdout]) if host_output.stdout else ''
+        stderr = '\n'.join([line for line in host_output.stderr]) if host_output.stderr else ''
         exit_code = host_output.exit_code
         result_template = Template(template)
 
