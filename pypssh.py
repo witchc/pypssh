@@ -41,10 +41,10 @@ def conversion_config(config:dict, group:str = 'all', username:str = None, passw
     if password:
         config['vars']['password'] = password
     if port:
-        config['vars']['port'] = str(port)
-    host_groups = {key: dict(value) for key, value in config._sections.items(
+        config['vars']['port'] = port
+    host_groups = {key: dict(value) for key, value in config.items(
     ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
-    vars_groups = {key: dict(value) for key, value in config._sections.items(
+    vars_groups = {key: dict(value) for key, value in config.items(
     ) if key == 'vars' or re.match(IS_VARS, key) and key != 'DEFAULT'}
 
     # 处理其他组
@@ -101,7 +101,7 @@ def cli(inventory, debug, username, password, port, target):
     except Exception as ex:
         logger.warning(ex)
     global host_selected
-    host_selected = get_operate_target(config, target, username, password, port)
+    host_selected = get_operate_target(config._sections, target, username, password, port)
     logger.debug("Host Selected is %s" % repr(host_selected))
     if debug:
         logger.setLevel(logging.DEBUG)
@@ -137,7 +137,6 @@ def execute(command, json, template):
         stderr = '\n'.join([line for line in host_output.stderr]) if host_output.stderr else ''
         exit_code = host_output.exit_code
         result_template = Template(template)
-
         result = {
             'host':host,
             'command':command,
@@ -146,7 +145,6 @@ def execute(command, json, template):
             'stderr':stderr,
             'exit_code':exit_code
         }
-
         if json:
             results.append(result)
         else:
