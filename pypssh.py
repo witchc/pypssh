@@ -127,12 +127,13 @@ def prints():
 
 @cli.command()
 @click.option('-c', '--command', prompt='command', type=str, help="需要批量执行的命令")
-@click.option('--json', flag_value=True, type=bool, required=False)
+@click.option('--json', flag_value=True, type=bool, required=False, help="将结果 json 化")
+@click.option('--view', type=click.Choice(['fail', 'success'], case_sensitive=False), required=False, help="根据条件仅查看输出结果的一部分，目前的条件只支持命令是否执行成功")
 @click.option('-t', '--template', 
               default="- Host: \n${host}\n- Command: \n${command}\n- Exception: \n${exstr}\n- STDOUT: \n${stdout}\n- STDERR: \n${stderr}\n- EXIT_CODE: \n${exit_code}\n", 
               type=str,help="python模版字符串,使用${var}能输出模板变量，目前支持的变量有host,command,exstr,stdout,stderr"
             )
-def execute(command, json, template):
+def execute(command, json, view, template):
     """
     为目标批量执行命令
     """
@@ -155,12 +156,16 @@ def execute(command, json, template):
             'stderr':stderr,
             'exit_code':exit_code
         }
+        if view:
+            if (view=="fail" and exit_code==0) or (view=="success" and exit_code!=0):
+                continue
+
         if json:
             results.append(result)
         else:
             click.echo(result_template.substitute(result))
     if json:
-        click.echo(jso.dumps(results))
+        click.echo(jso.dumps(results,ensure_ascii=False))
 
 
 @cli.command()
