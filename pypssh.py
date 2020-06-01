@@ -16,11 +16,10 @@ import click
 import gevent
 import json as jso
 
-logging.basicConfig(level=logging.ERROR,
-                    format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+logging.basicConfig(level=logging.ERROR,format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 # logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
-config = configparser.ConfigParser(allow_no_value=True)
+config = configparser.ConfigParser(allow_no_value=True, delimiters=("="))
 # 大小写不明感
 IS_VARS = re.compile("(\w+):vars", re.I)
 # 标准输入流
@@ -42,19 +41,30 @@ def conversion_config(config:dict, group:str = 'all', username:str = None, passw
         config['vars']['password'] = password
     if port:
         config['vars']['port'] = port
-    host_groups = {key: dict(value) for key, value in config.items(
+    _host_groups = {key: dict(value) for key, value in config.items(
+    ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
+    host_groups = {key: {} for key, value in config.items(
     ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
     vars_groups = {key: dict(value) for key, value in config.items(
     ) if key == 'vars' or re.match(IS_VARS, key) and key != 'DEFAULT'}
 
     # 处理其他组
-    for item_group in host_groups:
-        for host in host_groups[item_group]:
+    for item_group in _host_groups:
+        for host_str in list(_host_groups[item_group]):
+            _host = host_str.split(':')
+            host = _host[0]
             # 将组变量合并到组主机
             host_groups[item_group][host] = {}
             host_groups[item_group][host].update(vars_groups.get('vars', {}))
             host_groups[item_group][host].update(
-                vars_groups.get(item_group + ':vars', {}))
+                vars_groups.get(item_group + ':vars', {})
+            )
+            if len(_host) > 1 and _host[1]:
+                host_groups[item_group][host]['port'] = int(_host[1])
+            if len(_host) > 2 and _host[2]:
+                host_groups[item_group][host]['username'] = _host[2]
+            if len(_host) > 2 and _host[3]:
+                host_groups[item_group][host]['password'] = _host[3]
         host_groups['all'].update(host_groups[item_group])
 
     logger.debug('变量信息:\n' + pprint.pformat(vars_groups))
