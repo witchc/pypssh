@@ -137,6 +137,8 @@ def execute(command, json, view, template):
     """
     为目标批量执行命令
     """
+    if json:
+        logging.disable(50)
     client = get_client()
     output = client.run_command(command, stop_on_errors = False)
     client.join(output)
@@ -199,6 +201,8 @@ def pull(remote_file, local_file):
 @click.option('--json', flag_value=True, type=bool, required=False)
 @click.option('--ssh-test/--no-ssh-test', default=True, type=bool)
 def test(timeout, json, ssh_test):
+    if json:
+        logging.disable(50)
     """
     测试端口/ssh的连通性
     """
@@ -266,6 +270,8 @@ def execfile(ctx, script_file, json, template, script_arg, env, attachment, work
     """
     使本地脚本文件批量下发到远程执行
     """
+    if json:
+        logging.disable(50)
     put_files = []
     if not Path(script_file).is_file():
         raise AssertionError("script_file must is file!")
