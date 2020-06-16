@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.ERROR,format='%(asctime)s:%(name)s:%(levelname
 # logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 config = configparser.ConfigParser(allow_no_value=True, delimiters=("="))
+# 2020年6月17日 默认实现会将键转换为小写,这里改为不改变原来的键
+config.optionxform = lambda option: option
 # 大小写不明感
 IS_VARS = re.compile("(\w+):vars", re.I)
 # 标准输入流
