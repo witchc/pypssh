@@ -2,6 +2,7 @@
 import configparser
 import re
 import sys
+import platform
 import pprint
 from string import Template
 import paramiko
@@ -311,7 +312,8 @@ def version():
         ([
             f"地址: {addr}",
             f"版本号: {vno}",
-            f"解释器版本: {interrupt_version}"
+            f"解释器版本: {interrupt_version}",
+            f"发行版: {platform.platform()}"
         ])
     )
 if __name__ == '__main__':
