@@ -1,6 +1,7 @@
 #!/bin/env python
 import configparser
 import re
+import sys
 import pprint
 from string import Template
 import paramiko
@@ -300,6 +301,18 @@ def execfile(ctx, script_file, json, template, script_arg, env, attachment, work
     logger.debug(command)
     ctx.invoke(execute, command=command, json=json, template=template)
 
-
+@cli.command()
+def version():
+    addr = "https://github.com/Snile826/pypssh"
+    vno = "v0.0.8"
+    interrupt_version = "Python " + ' '.join(sys.version.split('\n'))
+    print(
+        "\n".join
+        ([
+            f"地址: {addr}",
+            f"版本号: {vno}",
+            f"解释器版本: {interrupt_version}"
+        ])
+    )
 if __name__ == '__main__':
     cli()
