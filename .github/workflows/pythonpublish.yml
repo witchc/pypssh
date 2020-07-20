@@ -24,7 +24,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirement.txt
-        pip install setuptools wheel twine
         pip freeze
     - name: Build and publish
       env:
