@@ -16,6 +16,7 @@ import click
 import gevent
 import json as jso
 
+
 logging.basicConfig(level=logging.ERROR,format='%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 # logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
@@ -23,12 +24,12 @@ config = configparser.ConfigParser(allow_no_value=True, delimiters=("="))
 # 2020年6月17日 默认实现会将键转换为小写,这里改为不改变原来的键
 config.optionxform = lambda option: option
 # 大小写不明感
-IS_VARS = re.compile("(\w+):vars", re.I)
+IS_VARS = re.compile("((\w+):)?vars", re.I)
 # 标准输入流
 # stdin_text = click.get_text_stream('stdin')
 # stdin_text.readable()
 
-host_selected = {}
+host_selected = dict()
 num_retries=1
 retry_delay=2
 
@@ -36,43 +37,50 @@ retry_delay=2
 
 
 def conversion_config(config:dict, group:str = 'all', username:str = None, password:str = None, port:int = None) -> dict:
-    config.setdefault('vars',{})
-    if username:
-        config['vars']['username'] = username
-    if password:
-        config['vars']['password'] = password
-    if port:
-        config['vars']['port'] = port
-    _host_groups = {key: dict(value) for key, value in config.items(
-    ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
-    host_groups = {key: {} for key, value in config.items(
-    ) if key != 'vars' and not re.match(IS_VARS, key) and key != 'DEFAULT'}
-    vars_groups = {key: dict(value) for key, value in config.items(
-    ) if key == 'vars' or re.match(IS_VARS, key) and key != 'DEFAULT'}
 
-    # 处理其他组
+    # 设置默认组
+    config.setdefault('vars',dict())
+    config.setdefault('all',dict())
+
+    # 获取所有主机组和值
+    _host_groups = {key: dict(value) for key, value in config.items() if not re.match(IS_VARS, key)}
+    # 获取所有主机组,设置值为空字典
+    host_groups = {key: dict() for key in _host_groups.keys()}
+    # 获取所有变量组
+    vars_groups = {key: dict(value) for key, value in config.items() if re.match(IS_VARS, key)}
+
+    # 处理主机组
     for item_group in _host_groups:
         for host_str in list(_host_groups[item_group]):
             _host = host_str.split(':')
             host = _host[0]
+
             # 将组变量合并到组主机
-            host_groups[item_group][host] = {}
-            host_groups[item_group][host].update(vars_groups.get('vars', {}))
-            host_groups[item_group][host].update(
-                vars_groups.get(item_group + ':vars', {})
-            )
+            host_groups[item_group][host] = dict()
+            host_groups[item_group][host].update(vars_groups.get('vars', dict()))
+            host_groups[item_group][host].update(vars_groups.get(item_group + ':vars', dict()))
+
+            # 将内联变量合并到组主机
             if len(_host) > 1 and _host[1]:
                 host_groups[item_group][host]['port'] = int(_host[1])
             if len(_host) > 2 and _host[2]:
                 host_groups[item_group][host]['username'] = _host[2]
             if len(_host) > 2 and _host[3]:
                 host_groups[item_group][host]['password'] = _host[3]
+
+            # 将命令行变量合并到组主机
+            if port:
+                host_groups[item_group][host]['port'] = port
+            if username:
+                host_groups[item_group][host]['username'] = username
+            if password:
+                host_groups[item_group][host]['password'] = password
+
+        # 将该组主机合并到 all 组中
         host_groups['all'].update(host_groups[item_group])
 
-    logger.debug('变量信息:\n' + pprint.pformat(vars_groups))
-    logger.debug('最终主机组:\n' + pprint.pformat(host_groups))
     if group:
-        return host_groups.get(group, {})
+        return host_groups.get(group, dict())
     else:
         return host_groups
 
@@ -80,7 +88,7 @@ def get_operate_target(config:dict, target:str, username:str, password:str, port
     group_target = conversion_config(config, None, username, password, port)
     host_target = {key: {key: dict(value)} for key, value in conversion_config(
         config, 'all', username, password, port).items()}
-    result = {**host_target, **group_target}.get(target, {})
+    result = {**host_target, **group_target}.get(target, dict())
     return result if result else {target:{'username':username,'password':password,'port':port}}
 
 def get_client():
@@ -88,7 +96,8 @@ def get_client():
                             list(host_selected.keys()), 
                             host_config=host_selected, 
                             num_retries=num_retries, 
-                            retry_delay=retry_delay
+                            retry_delay=retry_delay,
+                            pool_size = 10 if len(host_selected) < 10 else len(host_selected),
                             )
 
 @click.group()
@@ -106,6 +115,8 @@ def cli(inventory, debug, username, password, port, target):
     \n
       - 使用 test / prints 可以测试端口/ssh连通性和目标选取到的数据
     """
+    if debug:
+        logger.setLevel(logging.DEBUG)
     if not Path(inventory).is_file():
         logger.warning("%s 不是有效的配置文件" % inventory)
     try:
@@ -115,8 +126,6 @@ def cli(inventory, debug, username, password, port, target):
     global host_selected
     host_selected = get_operate_target(config._sections, target, username, password, port)
     logger.debug("Host Selected is %s" % repr(host_selected))
-    if debug:
-        logger.setLevel(logging.DEBUG)
 
 
 @cli.command()
@@ -124,7 +133,7 @@ def prints():
     """
     打印选择到的主机信息
     """
-    print(host_selected)
+    pprint.pprint(host_selected,None,2,160,None)
 
 
 @cli.command()
