@@ -62,7 +62,7 @@ Arguments支持：
 
 pyinstaller打包命令:
 ```bash
-pyinstaller pypssh.py -F --hidden-import=ssh2.agent --hidden-import=ssh2.pkey --hidden-import=ssh2.utils --hidden-import=ssh2.channel --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.listener --hidden-import=ssh2.statinfo --hidden-import=ssh2.knownhost --hidden-import=ssh2.sftp --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.session --hidden-import=ssh2.publickey --hidden-import=ssh2.fileinfo --hidden-import=ssh2.exceptions --hidden-import=ssh2.error_codes --hidden-import=ssh2.c_stat --hidden-import=ssh2.ssh2 --hidden-import=ssh2.c_sftp --hidden-import=ssh2.c_pkey --hidden-import=ssh2.agent
+pyinstaller pypssh.py -F --hidden-import=ssh2.agent --hidden-import=ssh2.pkey --hidden-import=ssh2.utils --hidden-import=ssh2.channel --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.listener --hidden-import=ssh2.statinfo --hidden-import=ssh2.knownhost --hidden-import=ssh2.sftp --hidden-import=ssh2.sftp_handle --hidden-import=ssh2.session --hidden-import=ssh2.publickey --hidden-import=ssh2.fileinfo --hidden-import=ssh2.exceptions --hidden-import=ssh2.error_codes --hidden-import=ssh2.c_stat --hidden-import=ssh2.ssh2 --hidden-import=ssh2.c_sftp --hidden-import=ssh2.c_pkey --hidden-import=ssh2.agent --hidden-import=pkg_resources.py2_warn
 ```
 
 
