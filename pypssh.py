@@ -305,8 +305,8 @@ def execfile(ctx, script_file, json, template, script_arg, env, attachment, work
 
 @cli.command()
 def version():
-    addr = "https://github.com/Snile826/pypssh"
-    vno = "v0.0.8"
+    addr = "https://github.com/witchc/pypssh"
+    vno = "v0.0.9"
     interrupt_version = "Python " + ' '.join(sys.version.split('\n'))
     print(
         "\n".join
