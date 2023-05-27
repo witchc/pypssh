@@ -316,15 +316,19 @@ def realtime_output(host: Host, command: str):
         client = get_ssh_conn_client(host)
         transport = client.get_transport()
         channel = transport.open_session()
+        # set environment
+        # envStr = f"export {BUILDIN_ENV_PREFIX}_HOSTNAME={host.hostname};"
+        envStr=""
+        for key, value in host.env.items():
+            # 下面这行在某些环境不生效, 所以改成了命令的形式
+            # channel.set_environment_variable(name=key, value=value)
+            envStr+=f"export {key}={value};"
         # 必须获取 pty 才能有机会输入 sudo
         channel.get_pty()
+        channel.update_environment(host.env)
         # 若是非阻塞则强制 recv 时会造成错误
         # channel.setblocking(0)
-        channel.exec_command(command)
-        # set environment
-        channel.set_environment_variable(name=f"{BUILDIN_ENV_PREFIX}_HOSTNAME", value=host.hostname)
-        for key, value in host.env:
-            channel.set_environment_variable(name=key, value=value)     
+        channel.exec_command(envStr+command)
         if host.sudo:
             while channel.recv_ready() == False:
                 stdout = channel.recv(4096)
@@ -662,8 +666,8 @@ def convert(version, config_file):
 @click.option('-u', '--username', type=str, required=True)
 @click.option('-p', '--passwd', type=str, required=True)
 @click.option('-P', '--port', type=str, required=False, default=22)
-@click.option('--pkfile', type=str, required=False)
-@click.option('--pkpasswd', type=str, required=False)
+@click.option('--pkfile', type=str, required=False, default="")
+@click.option('--pkpasswd', type=str, required=False, default="")
 @click.option('-s', '--sudo', type=str, required=False, default=False)
 @click.option('-t', '--timeout', type=int, required=False, default=5)
 @click.option('-e', '--env', type=str, required=False, multiple=True)
@@ -687,8 +691,11 @@ def add_host(input, inventory, field_separator, username, passwd, port, pkfile, 
         k, v = e.split("=")
         _env[k] = v
     for t in tag:
-        k, v = t.split("=")
-        _tags[k] = v
+        if "=" in t:
+            k, v = t.split("=")
+            _tags[k] = v
+        else:
+            _tags[k] = ""
 
     for hostname in hostnames:
         host = Host(

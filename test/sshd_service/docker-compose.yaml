@@ -1,4 +1,4 @@
-version: "3"
+version: "3.9"
 
 services:
   sshd:
@@ -7,14 +7,19 @@ services:
     environment:
       - SSH_ENABLE_ROOT=true
       - SSH_ENABLE_ROOT_PASSWORD_AUTH=true
+      - SSH_ENABLE_PASSWORD_AUTH=true
     volumes:
       - "./chpasswd.sh:/etc/entrypoint.d/chpasswd.sh"
     networks:
-      - sshd
-
+      - sshd  
+    healthcheck:
+        test: ["CMD", "ssh", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no", "localhost"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
 networks:
   sshd:
     ipam:
       driver: default
       config:
-        - subnet: "10.2.0.0/16"
+        - subnet: "198.168.0.0/16"
